@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: homayoun-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    plan: free
+    envVars:
+      - key: BALE_TOKEN
+        sync: false
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: NOTION_TOKEN
+        sync: false
+      - key: NOTION_DATABASE_ID
+        sync: false
