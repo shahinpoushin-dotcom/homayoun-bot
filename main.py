@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import requests
 import threading
@@ -6,78 +7,93 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
 # ─── Config ───────────────────────────────────────────────
-BALE_TOKEN          = os.environ.get("BALE_TOKEN", "")
-CLAUDE_API_KEY      = os.environ.get("CLAUDE_API_KEY", "")
-NOTION_TOKEN        = os.environ.get("NOTION_TOKEN", "")
-NOTION_DATABASE_ID  = os.environ.get("NOTION_DATABASE_ID", "")
+BALE_TOKEN         = os.environ.get("BALE_TOKEN", "")
+CLAUDE_API_KEY     = os.environ.get("CLAUDE_API_KEY", "")
+NOTION_TOKEN       = os.environ.get("NOTION_TOKEN", "")
+NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
 
 BALE_BASE = f"https://tapi.ir/v1/bot{BALE_TOKEN}"
 
 # ─── System Prompt همایون ─────────────────────────────────
 SYSTEM_PROMPT = """تو همایون هستی — مشاور اولیه موسسه مهاجرتی هما.
 
+اطلاعات موسسه هما:
+- تخصص: مهاجرت تحصیلی و کاری به ایتالیا، آلمان، انگلستان، قطر، عمان
+- سایت: homaic.com
+- شماره‌های تماس: 026-32232003 | 021-91010246 | 0936-2552218
+- آدرس: کرج، میدان توحید، جنب درمانگاه نفت، پلاک 102، مجتمع هما
+- ساعت کاری: شنبه تا چهارشنبه ۹ تا ۱۸، پنجشنبه ۹ تا ۱۴
+
 شخصیت تو:
 - مثل یک دوست آگاه و صادق حرف می‌زنی، نه مثل یک ربات یا فرم اداری
 - گرم، صمیمی، و حرفه‌ای هستی
-- فارسی روان و طبیعی می‌نویسی — بدون اصطلاحات پیچیده
-- پاسخ‌هایت کوتاه و مفید است — حداکثر ۵ تا ۶ خط در هر پیام
-- اطلاعات واقعی و تحلیلی می‌دهی — نه جواب‌های کلی و مبهم
+- فارسی روان و طبیعی می‌نویسی
+- پاسخ‌هایت کوتاه و مفید — حداکثر ۵ تا ۶ خط در هر پیام
+- اطلاعات واقعی و تحلیلی می‌دهی
 - هیچ‌وقت عجله نداری و مشتری را تحت فشار نمی‌گذاری
 
-موسسه هما:
-- تخصص: مهاجرت تحصیلی و کاری به ایتالیا، آلمان، انگلستان، قطر، عمان
-- سایت: homaic.com
+اطلاعات تخصصی مهاجرت تحصیلی:
+ایتالیا: ویزای D تحصیلی، بدون محدودیت سنی، ایلتس ۵.۵ یا B2 ایتالیایی،
+هزینه تحصیل 160-400 یورو در سال، پروسه ۳-۶ ماه، امکان اقامت بعد از فارغ‌التحصیلی.
+آلمان: بلوکه حساب ۱۱۹۰۴ یورو الزامی، زبان B2، دانشگاه رایگان، پروسه ۶-۹ ماه.
+انگلستان: هزینه بالا (10000-30000 پوند)، IELTS 6.0+، CAS از دانشگاه، پروسه ۳-۵ ماه.
+
+اطلاعات تخصصی مهاجرت کاری:
+قطر: حداقل ۲ سال سابقه کاری، بیمه پیوسته مهم، اسپانسری کارفرما، حقوق بدون مالیات.
+عمان: شرایط مشابه قطر، کمی آسان‌تر، مناسب تکنسین‌ها.
+آلمان کاری: معادل‌سازی مدرک (Anerkennung)، حداقل B1 آلمانی، پروسه ۸-۱۲ ماه.
 
 جریان مکالمه:
+۱. خوش‌آمدگویی گرم + بپرس نوع مهاجرت (تحصیلی/کاری)
+۲. اطلاعات رو طبیعی جمع کن — هر بار یک یا دو سوال:
+   عمومی: کشور هدف، شرایط زندگی، بازه زمانی، بودجه، سن، زبان، سابقه رد ویزا
+   تحصیلی: مدرک، رشته، معدل
+   کاری: مدرک فنی، سابقه کاری، سابقه بیمه
+۳. تحلیل کن: مسیر مناسب، مدارک، مدت، چالش‌ها. صادق باش.
+۴. شماره موبایل بخواه و بگو متخصص تماس می‌گیره.
+   وقتی شماره داد بگو: "ممنون! یکی از متخصصان هما در اولین فرصت باهات تماس می‌گیره."
 
-مرحله ۱ — خوش‌آمدگویی:
-با یک پیام گرم و کوتاه شروع کن. بپرس چه نوع مهاجرتی در ذهن دارند.
-
-مرحله ۲ — جمع‌آوری اطلاعات (طبیعی، نه فرم):
-اطلاعات رو در طول مکالمه به شکل طبیعی بپرس — هر بار یک یا دو سوال.
-بین سوال‌ها، اطلاعات مفید و تحلیلی بده.
-
-اطلاعاتی که باید جمع کنی (به صورت طبیعی، نه فرم):
-عمومی: نوع مهاجرت، کشور هدف، شرایط زندگی (مجرد/متأهل/فرزند)،
-بازه زمانی، بودجه، سن، وضعیت زبان، سابقه رد ویزا، شماره تماس
-تحصیلی: مدرک تحصیلی، رشته، معدل
-کاری: مدرک فنی/حرفه‌ای، سابقه کاری، سابقه بیمه
-
-مرحله ۳ — تحلیل و راهنمایی:
-بعد از جمع اطلاعات کافی، تحلیل کن: مسیر مناسب، مدارک لازم،
-مدت پروسه، چالش‌های احتمالی. صادق باش.
-
-مرحله ۴ — هندآف:
-وقتی اطلاعات کامل شد بگو:
-"بر اساس اطلاعاتی که دادی، فکر می‌کنم یه مشاوره تخصصی‌تر لازمه.
-می‌تونم شماره‌ات رو بگیرم تا متخصص هما باهات تماس بگیره؟"
-
-پروتکل هندآف فوری (بدون تحلیل بیشتر، مستقیم بگو متخصص تماس می‌گیره):
-- سن بالای ۴۵ سال + ویزا تحصیلی
-- سابقه رد ویزا از هر کشوری
+هندآف فوری (مستقیم شماره بخواه):
+- سن بالای ۴۵ + تحصیلی
+- سابقه رد ویزا
 - وضعیت حقوقی پیچیده
-- مسیر غیرمعمول
-
-در این موارد بگو:
-"این وضعیت پیچیدگی‌هایی داره که نمی‌خوام اشتباه راهنماییت کنم.
-بذار یه متخصص هما دقیق‌تر بررسی کنه. شماره‌ات رو بدی؟"
 
 مرزها — هرگز نگو:
-- تضمین پذیرش یا ویزا
+- تضمین ویزا یا پذیرش
 - قیمت دقیق خدمات هما
-- نظر حقوقی قطعی
-- مقایسه با رقبا"""
+- نظر حقوقی قطعی"""
 
-# ─── حافظه مکالمه (در حافظه RAM) ────────────────────────
-conversations = {}   # user_id -> [{"role": ..., "content": ...}]
+# ─── حافظه کاربران ────────────────────────────────────────
+conversations = {}    # user_id -> messages
+user_info     = {}    # user_id -> {name, phone, country, saved}
+
+# ─── استخراج شماره موبایل ─────────────────────────────────
+def extract_phone(text):
+    match = re.search(r'(\+98|0098|0)9[\d\s\-]{9,11}', text)
+    if match:
+        return re.sub(r'[\s\-]', '', match.group())
+    return None
+
+# ─── استخراج کشور از مکالمه ───────────────────────────────
+def extract_country(conversations_list):
+    countries = ["ایتالیا", "آلمان", "انگلستان", "قطر", "عمان", "ترکیه"]
+    for msg in reversed(conversations_list):
+        for c in countries:
+            if c in msg.get("content", ""):
+                return c
+    return ""
 
 # ─── Bale API ─────────────────────────────────────────────
 def bale(method, params=None):
+    url = f"{BALE_BASE}/{method}"
     try:
-        res = requests.post(BALE_BASE + method, json=params, timeout=15)
-        return res.json()
+        res = requests.post(url, json=params, timeout=15)
+        data = res.json()
+        if not data.get("ok"):
+            print(f"[Bale error] {method}: {data}")
+        return data
     except Exception as e:
-        print(f"[Bale] {e}")
+        print(f"[Bale exception] {e}")
         return {}
 
 def send(chat_id, text):
@@ -87,10 +103,8 @@ def send(chat_id, text):
 def ask_claude(user_id, user_message):
     if user_id not in conversations:
         conversations[user_id] = []
-
     conversations[user_id].append({"role": "user", "content": user_message})
-    messages = conversations[user_id][-20:]  # آخرین ۲۰ پیام
-
+    messages = conversations[user_id][-20:]
     try:
         res = requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -107,19 +121,24 @@ def ask_claude(user_id, user_message):
             },
             timeout=30
         )
-        reply = res.json()["content"][0]["text"]
+        data = res.json()
+        if "error" in data:
+            print(f"[Claude error] {data['error']}")
+            return "متأسفم، مشکل موقتی پیش اومد. دوباره امتحان کن."
+        reply = data["content"][0]["text"]
         conversations[user_id].append({"role": "assistant", "content": reply})
         return reply
     except Exception as e:
-        print(f"[Claude] {e}")
-        return "متأسفم، یه مشکل فنی پیش اومد. لطفاً دوباره امتحان کن."
+        print(f"[Claude exception] {e}")
+        return "متأسفم، مشکل موقتی پیش اومد. دوباره امتحان کن."
 
-# ─── Notion API ───────────────────────────────────────────
-def save_notion(user_id, name, phone, migration_type, country):
+# ─── Notion — ذخیره در People ────────────────────────────
+def save_to_notion(user_id, name, phone, bale_id, country):
     if not NOTION_TOKEN or not NOTION_DATABASE_ID:
+        print("[Notion] توکن تنظیم نشده")
         return
     try:
-        requests.post(
+        res = requests.post(
             "https://api.notion.com/v1/pages",
             headers={
                 "Authorization": f"Bearer {NOTION_TOKEN}",
@@ -129,55 +148,83 @@ def save_notion(user_id, name, phone, migration_type, country):
             json={
                 "parent": {"database_id": NOTION_DATABASE_ID},
                 "properties": {
-                    "نام":          {"title":     [{"text": {"content": name or "نامشخص"}}]},
-                    "شماره تماس":  {"rich_text": [{"text": {"content": phone or ""}}]},
-                    "نوع مهاجرت": {"rich_text": [{"text": {"content": migration_type or ""}}]},
-                    "کشور هدف":   {"rich_text": [{"text": {"content": country or ""}}]},
-                    "تاریخ":       {"rich_text": [{"text": {"content": datetime.now().strftime("%Y-%m-%d %H:%M")}}]},
-                    "وضعیت":      {"rich_text": [{"text": {"content": "جدید"}}]},
+                    "نام":            {"title":  [{"text": {"content": name or "نامشخص"}}]},
+                    "موبایل":         {"phone_number": phone or ""},
+                    "کانال ورودی":   {"select": {"name": "بله"}},
+                    "وضعیت لید":     {"select": {"name": "جدید"}},
+                    "آیدی بله":      {"rich_text": [{"text": {"content": str(bale_id or "")}}]},
+                    "کشور درخواستی": {"select": {"name": country}} if country else {},
+                    "تاریخ ثبت":     {"date": {"start": datetime.now().isoformat()}},
                 }
             },
             timeout=10
         )
-        print(f"[Notion] Lead saved: {name} {phone}")
+        data = res.json()
+        if data.get("object") == "page":
+            print(f"[Notion] ✅ {name} — {phone} — {country}")
+        else:
+            print(f"[Notion] ❌ {data}")
     except Exception as e:
-        print(f"[Notion] {e}")
+        print(f"[Notion exception] {e}")
 
 # ─── Bot Loop ─────────────────────────────────────────────
 def bot_loop():
     print("همایون شروع به کار کرد...")
+    me = bale("getMe")
+    print(f"[getMe] {me}")
     offset = 0
-
     while True:
         try:
-            result = bale("getUpdates", {"offset": offset, "timeout": 25})
-            if not result.get("ok"):
-                time.sleep(3)
-                continue
-
+            result = bale("getUpdates", {"offset": offset, "timeout": 20})
             for update in result.get("result", []):
                 offset = update["update_id"] + 1
                 msg = update.get("message")
                 if not msg:
                     continue
 
-                chat_id = msg["chat"]["id"]
-                user_id = str(msg["from"]["id"])
-                text    = msg.get("text", "").strip()
-
+                chat_id   = msg["chat"]["id"]
+                user_id   = str(msg["from"]["id"])
+                first_name= msg["from"].get("first_name", "")
+                text      = msg.get("text", "").strip()
                 if not text:
                     continue
 
-                print(f"[IN] {user_id}: {text[:60]}")
+                print(f"[IN] {user_id}: {text[:80]}")
+
+                # اگه کاربر جدیده، اطلاعاتش رو ذخیره کن
+                if user_id not in user_info:
+                    user_info[user_id] = {
+                        "name": first_name,
+                        "phone": None,
+                        "country": "",
+                        "saved": False
+                    }
+
+                # بررسی شماره موبایل
+                phone = extract_phone(text)
+                if phone and not user_info[user_id]["saved"]:
+                    user_info[user_id]["phone"] = phone
+                    country = extract_country(conversations.get(user_id, []))
+                    user_info[user_id]["country"] = country
+                    save_to_notion(
+                        user_id,
+                        user_info[user_id]["name"],
+                        phone,
+                        user_id,
+                        country
+                    )
+                    user_info[user_id]["saved"] = True
+                    print(f"[Lead saved] {first_name} — {phone}")
+
                 reply = ask_claude(user_id, text)
                 send(chat_id, reply)
-                print(f"[OUT]: {reply[:60]}")
+                print(f"[OUT] {reply[:80]}")
 
         except Exception as e:
-            print(f"[Loop] {e}")
+            print(f"[Loop error] {e}")
             time.sleep(5)
 
-# ─── Health Check Server (برای Render) ───────────────────
+# ─── Health Check ─────────────────────────────────────────
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -188,6 +235,7 @@ class Health(BaseHTTPRequestHandler):
 
 def start_server():
     port = int(os.environ.get("PORT", 10000))
+    print(f"Health server on port {port}")
     HTTPServer(("0.0.0.0", port), Health).serve_forever()
 
 # ─── Main ─────────────────────────────────────────────────
