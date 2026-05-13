@@ -11,7 +11,7 @@ CLAUDE_API_KEY      = os.environ.get("CLAUDE_API_KEY", "")
 NOTION_TOKEN        = os.environ.get("NOTION_TOKEN", "")
 NOTION_DATABASE_ID  = os.environ.get("NOTION_DATABASE_ID", "")
 
-BALE_BASE = f"https://tapi.ir/v1/bot{BALE_TOKEN}/"
+BALE_BASE = f"https://tapi.ir/v1/bot{BALE_TOKEN}"
 
 # ─── System Prompt همایون ─────────────────────────────────
 SYSTEM_PROMPT = """تو همایون هستی — مشاور اولیه موسسه مهاجرتی هما.
