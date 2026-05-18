@@ -121,10 +121,10 @@ def save_notion(name, phone, bale_id):
                         "phone_number": phone or ""
                     },
                     "کانال ورودی": {
-                        "select": {"name": "بله"}
+                        "status": {"name": "بله"}
                     },
                     "وضعیت لید": {
-                        "select": {"name": "جدید"}
+                        "status": {"name": "جدید"}
                     },
                     "آیدی بله": {
                         "rich_text": [{"text": {"content": str(bale_id or "")}}]
