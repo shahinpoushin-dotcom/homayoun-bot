@@ -97,27 +97,51 @@ def ask_claude(user_id, user_message):
         return "متأسفم، مشکل موقتی. دوباره امتحان کن."
 
 def save_notion(name, phone, bale_id):
+    print(f"[Notion] trying to save: name={name}, phone={phone}, bale_id={bale_id}")
+
     if not NOTION_TOKEN or not NOTION_DATABASE_ID or NOTION_TOKEN == "placeholder":
+        print("[Notion] skipped: missing NOTION_TOKEN or NOTION_DATABASE_ID")
         return
+
     try:
         res = requests.post(
             "https://api.notion.com/v1/pages",
-            headers={"Authorization": f"Bearer {NOTION_TOKEN}",
-                     "Content-Type": "application/json",
-                     "Notion-Version": "2022-06-28"},
-            json={"parent": {"database_id": NOTION_DATABASE_ID},
-                  "properties": {
-                      "نام":          {"title": [{"text": {"content": name or "نامشخص"}}]},
-                      "موبایل":       {"phone_number": phone or ""},
-                      "کانال ورودی": {"select": {"name": "بله"}},
-                      "وضعیت لید":   {"select": {"name": "جدید"}},
-                      "آیدی بله":    {"rich_text": [{"text": {"content": str(bale_id or "")}}]},
-                  }},
-            timeout=10)
-        if res.json().get("object") == "page":
-            print(f"[Notion] ✅ {name} — {phone}")
+            headers={
+                "Authorization": f"Bearer {NOTION_TOKEN}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28"
+            },
+            json={
+                "parent": {"database_id": NOTION_DATABASE_ID},
+                "properties": {
+                    "نام": {
+                        "title": [{"text": {"content": name or "نامشخص"}}]
+                    },
+                    "موبایل": {
+                        "phone_number": phone or ""
+                    },
+                    "کانال ورودی": {
+                        "select": {"name": "بله"}
+                    },
+                    "وضعیت لید": {
+                        "select": {"name": "جدید"}
+                    },
+                    "آیدی بله": {
+                        "rich_text": [{"text": {"content": str(bale_id or "")}}]
+                    },
+                }
+            },
+            timeout=10
+        )
+
+        print(f"[Notion status] {res.status_code}")
+        print(f"[Notion response] {res.text}")
+
+        if res.status_code in [200, 201]:
+            print(f"[Notion] ✅ saved: {name} — {phone}")
         else:
-            print(f"[Notion] ❌ {res.json()}")
+            print("[Notion] ❌ failed")
+
     except Exception as e:
         print(f"[Notion error] {e}")
 
