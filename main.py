@@ -12,7 +12,7 @@ NOTION_TOKEN       = os.environ.get("NOTION_TOKEN", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
 RENDER_URL         = os.environ.get("RENDER_URL", "https://homayoun-bot.onrender.com")
 
-BALE_BASE = f"https://tapi.ir/v1/bot{BALE_TOKEN}"
+BALE_BASE = f"https://tapi.bale.ai/bot{BALE_TOKEN}"
 
 SYSTEM_PROMPT = """تو همایون هستی — مشاور اولیه موسسه مهاجرتی هما.
 
